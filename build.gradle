@@ -26,7 +26,7 @@ dependencies {
 	testImplementation group: 'net.runelite', name:'jshell', version: runeLiteVersion
 }
 
-group = 'com.example'
+group = 'com.extremehcim'
 version = '1.0-SNAPSHOT'
 
 tasks.withType(JavaCompile).configureEach {
@@ -34,10 +34,26 @@ tasks.withType(JavaCompile).configureEach {
 	options.release.set(11)
 }
 
+// Add this jar task to properly package the plugin
+jar {
+	manifest {
+		attributes(
+				'Plugin-Class': 'com.extremehcim.XtremeHCIMPlugin',
+				'Plugin-Id': 'extremehcim',
+				'Plugin-Version': version
+		)
+	}
+
+	// Include the properties file
+	from('runelite-plugin.properties') {
+		into '/'
+	}
+}
+
 tasks.register('shadowJar', Jar) {
 	dependsOn configurations.testRuntimeClasspath
 	manifest {
-		attributes('Main-Class': 'com.example.ExamplePluginTest', 'Multi-Release': true)
+		attributes('Main-Class': 'com.extremehcim.PluginLauncher', 'Multi-Release': true)
 	}
 
 	duplicatesStrategy = DuplicatesStrategy.EXCLUDE
