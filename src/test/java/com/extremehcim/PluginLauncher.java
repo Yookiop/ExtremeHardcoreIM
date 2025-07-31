@@ -7,7 +7,7 @@ public class PluginLauncher
 {
 	public static void main(String[] args) throws Exception
 	{
-		ExternalPluginManager.loadBuiltin(GlassmanPlugin.class);
+		ExternalPluginManager.loadBuiltin(XtremeHCIMPlugin.class);
 		RuneLite.main(args);
 	}
 }

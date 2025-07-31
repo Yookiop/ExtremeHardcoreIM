@@ -23,26 +23,43 @@ import javax.inject.Inject;
 
 @Slf4j
 @PluginDescriptor(
-		name = "Glassman",
-		description = "Play the game as a Glassman (One Health Point / Nightmare mode)",
-		tags = {"glass", "man", "1", "hp", "nightmare", "mode", "damage", "hit", "health", "heart", "fragile"}
+		name = "ExtremeHCIM",
+		description = "Play the game with 1 true life and there are no safe deaths",
+		tags = {"man", "HCIM", "hp", "nightmare", "mode", "damage", "hit", "health", "extreme", "fragile"}
 )
 
-public class GlassmanPlugin extends Plugin
+public class XtremeHCIMPlugin extends Plugin
 {
-	@Inject	private Client client;
+	@Inject private Client client;
+	@Inject private ConfigManager configManager;
+	@Inject private XtremeHCIMConfig config;
 
-	@Inject	private ConfigManager configManager;
-
-	private boolean playerIsFragile = true;
+	private boolean playerIsFragile = false;
 	private final String GLASSMANCONFIGGROUP = "GLASSMAN";
 	private final String GLASSMANVALID = "VALID";
+	private final String GLASSMANACTIVATED = "ACTIVATED";
 
 	private final Set<WorldArea> tutorialIslandWorldArea = ImmutableSet.of(
 			new WorldArea(3053, 3072, 103, 64, 0),
 			new WorldArea(3059, 3051, 77, 21, 0),
 			new WorldArea(3072, 9493, 45, 41, 0)
 	);
+
+	@Override
+	protected void startUp() throws Exception
+	{
+		// Check if player was already in Xtreme HCIM mode or if config is enabled
+		boolean wasFragile = isPlayerFragile();
+		boolean configEnabled = config.enableXtremeHCIM();
+
+		playerIsFragile = wasFragile || configEnabled;
+
+		if (playerIsFragile)
+		{
+			overrideSprites();
+			sendGamemodeMessage("Xtreme HCIM mode is active. You have one life!", Color.MAGENTA);
+		}
+	}
 
 	@Override
 	protected void shutDown() throws Exception
@@ -55,44 +72,61 @@ public class GlassmanPlugin extends Plugin
 	{
 		if (p.getPlayer() == client.getLocalPlayer())
 		{
+			// Check if player is already in Xtreme HCIM mode
+			playerIsFragile = isPlayerFragile();
+
+			if (playerIsFragile)
+			{
+				overrideSprites();
+				return;
+			}
+
+			// Only auto-activate on Tutorial Island for new accounts
 			if (locationIsOnTutorialIsland(client.getLocalPlayer().getWorldLocation()))
 			{
-				if (getCombatExperience() == 0) {
-					overrideSprites();
-					sendGamemodeMessage("You begin to feel fragile... as though with just one hit your journey" +
-							" will be over and your heart will shatter. How far will you get?",	Color.MAGENTA);
-					playerIsFragile = true;
-					setPlayerConfig(GLASSMANVALID,Boolean.toString(playerIsFragile));
-				}
-				else
+				if (getCombatExperience() == 0 && !hasPlayerEverActivatedMode())
 				{
-					sendGamemodeMessage("You have previously entered combat and are ineligible to be a Glassman.",
-							Color.RED);
-					restoreGame(true);
+					activateXtremeHCIMMode();
+				}
+				else if (getCombatExperience() > 0)
+				{
+					sendGamemodeMessage("You have previously entered combat and are ineligible for auto-activation.", Color.RED);
 				}
 			}
-			else
+			// For players outside Tutorial Island, they need to manually activate
+			else if (!hasPlayerEverActivatedMode())
 			{
-				playerIsFragile = isPlayerFragile();
-				if (!playerIsFragile)
-				{
-					sendGamemodeMessage("You are not eligible to be a Glassman.", Color.RED);
-					restoreGame(true);
-				}
-				else
-				{
-					overrideSprites();
-				}
+				sendGamemodeMessage("Type '::xtremehcim' to activate Xtreme HCIM mode (WARNING: No safe deaths!)", Color.YELLOW);
 			}
 		}
 	}
 
 	@Subscribe
-	public void onGameTick(GameTick t) {
+	public void onGameTick(GameTick t)
+	{
+		// Check config state every tick and sync
+		boolean configEnabled = config.enableXtremeHCIM();
+
+		if (configEnabled && !playerIsFragile)
+		{
+			// Config enabled but mode not active - activate it
+			if (client.getBoostedSkillLevel(Skill.HITPOINTS) > 1)
+			{
+				activateXtremeHCIMMode();
+			}
+		}
+		else if (!configEnabled && playerIsFragile)
+		{
+			// Config disabled but mode is active - deactivate it
+			restoreGame(true);
+			sendGamemodeMessage("Xtreme HCIM mode has been deactivated.", Color.YELLOW);
+		}
+
 		if (playerIsFragile)
 		{
-			setHPOrbText(1);
-			setHPStatText(1,1);
+			int currentHP = client.getBoostedSkillLevel(Skill.HITPOINTS);
+			setHPOrbText(currentHP);
+			setHPStatText(currentHP, currentHP);
 			setHPListeners(false);
 		}
 	}
@@ -102,13 +136,49 @@ public class GlassmanPlugin extends Plugin
 	{
 		if (damage.getActor() != client.getLocalPlayer()) {return;}
 
-		if (damage.getHitsplat().getAmount() > 0 && playerIsFragile)
+		// Check if player has 0 HP after taking damage
+		if (client.getBoostedSkillLevel(Skill.HITPOINTS) <= 0 && playerIsFragile)
 		{
 			restoreGame(true);
-
-			sendGamemodeMessage("And with one blow, your fragile heart shatters. Having taken damage, you are no" +
-					" longer worthy of Glassman status...", Color.RED);
+			sendGamemodeMessage("You've reached 0 HP and lost your Xtreme HCIM status", Color.RED);
 		}
+		else if (playerIsFragile && config.showWarnings() && damage.getHitsplat().getAmount() > 0)
+		{
+			int currentHP = client.getBoostedSkillLevel(Skill.HITPOINTS);
+			if (currentHP <= 5)
+			{
+				sendGamemodeMessage("⚠️ WARNING: Only " + currentHP + " HP remaining!", Color.RED);
+			}
+		}
+	}
+
+
+
+	public void manuallyActivateXtremeHCIM()
+	{
+		if (playerIsFragile)
+		{
+			sendGamemodeMessage("Xtreme HCIM mode is already active!", Color.ORANGE);
+			return;
+		}
+
+		if (client.getBoostedSkillLevel(Skill.HITPOINTS) <= 1)
+		{
+			sendGamemodeMessage("You need more than 1 HP to activate Xtreme HCIM mode safely!", Color.RED);
+			return;
+		}
+
+		activateXtremeHCIMMode();
+	}
+
+	private void activateXtremeHCIMMode()
+	{
+		overrideSprites();
+		sendGamemodeMessage("You have chosen to be a Xtreme HCIM. You have one life and" +
+				" there are no safe deaths. How far will you get?", Color.MAGENTA);
+		playerIsFragile = true;
+		setPlayerConfig(GLASSMANVALID, Boolean.toString(playerIsFragile));
+		setPlayerConfig(GLASSMANACTIVATED, Boolean.toString(true));
 	}
 
 	private long getCombatExperience()
@@ -125,12 +195,20 @@ public class GlassmanPlugin extends Plugin
 		return Boolean.parseBoolean(playerString);
 	}
 
-	private void removePlayerFromFragileMode()
+	private boolean hasPlayerEverActivatedMode()
 	{
-		setPlayerConfig(GLASSMANVALID,false);
+		String activatedString = getPlayerConfig(GLASSMANACTIVATED);
+		if (activatedString == null) {return false;}
+		return Boolean.parseBoolean(activatedString);
 	}
 
-	private void setPlayerConfig(String key, Object value) {
+	private void removePlayerFromFragileMode()
+	{
+		setPlayerConfig(GLASSMANVALID, "false");
+	}
+
+	private void setPlayerConfig(String key, Object value)
+	{
 		if (value != null) {
 			configManager.setRSProfileConfiguration(GLASSMANCONFIGGROUP, key, value);
 		}
@@ -139,16 +217,19 @@ public class GlassmanPlugin extends Plugin
 		}
 	}
 
-	private String getPlayerConfig(String key) {
+	private String getPlayerConfig(String key)
+	{
 		return configManager.getRSProfileConfiguration(GLASSMANCONFIGGROUP, key);
 	}
 
-	private void sendGamemodeMessage(String msg, Color formatColor)	{
-		String message = ColorUtil.wrapWithColorTag(String.format(msg),formatColor);
+	private void sendGamemodeMessage(String msg, Color formatColor)
+	{
+		String message = ColorUtil.wrapWithColorTag(String.format(msg), formatColor);
 		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", message, null);
 	}
 
-	private boolean locationIsOnTutorialIsland(WorldPoint playerLocation) {
+	private boolean locationIsOnTutorialIsland(WorldPoint playerLocation)
+	{
 		for (WorldArea worldArea : tutorialIslandWorldArea) {
 			if (worldArea.contains2D(playerLocation)) {
 				return true;
@@ -157,7 +238,8 @@ public class GlassmanPlugin extends Plugin
 		return false;
 	}
 
-	private void restoreGame(boolean removePlayerFromGamemode) {
+	private void restoreGame(boolean removePlayerFromGamemode)
+	{
 		playerIsFragile = false;
 		if (removePlayerFromGamemode) {removePlayerFromFragileMode();}
 		setHPListeners(true);
@@ -192,8 +274,10 @@ public class GlassmanPlugin extends Plugin
 		Widget HPStatWidget = client.getWidget(InterfaceID.Stats.HITPOINTS);
 		if (HPStatWidget != null) {
 			Widget[] HPStatWidgetComponents = HPStatWidget.getDynamicChildren();
-			HPStatWidgetComponents[3].setText(Integer.toString(topStatLevel));
-			HPStatWidgetComponents[4].setText(Integer.toString(bottomStatLevel));
+			if (HPStatWidgetComponents != null && HPStatWidgetComponents.length > 4) {
+				HPStatWidgetComponents[3].setText(Integer.toString(topStatLevel));
+				HPStatWidgetComponents[4].setText(Integer.toString(bottomStatLevel));
+			}
 		}
 	}
 
