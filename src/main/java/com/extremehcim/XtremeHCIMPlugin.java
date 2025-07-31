@@ -1,13 +1,9 @@
 package com.extremehcim;
 
-import com.google.common.collect.ImmutableSet;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
-import net.runelite.api.coords.WorldArea;
-import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.HitsplatApplied;
-import net.runelite.api.events.PlayerSpawned;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.config.ConfigManager;
@@ -18,16 +14,14 @@ import net.runelite.client.util.ColorUtil;
 import net.runelite.client.util.ImageUtil;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
-import java.util.*;
 import javax.inject.Inject;
 
 @Slf4j
 @PluginDescriptor(
 		name = "ExtremeHCIM",
 		description = "Play the game with 1 true life and there are no safe deaths",
-		tags = {"man", "HCIM", "hp", "nightmare", "mode", "damage", "hit", "health", "extreme", "fragile"}
+		tags = {"HCIM", "hp", "nightmare", "mode", "damage", "hit", "health", "extreme", "fragile"}
 )
-
 public class XtremeHCIMPlugin extends Plugin
 {
 	@Inject private Client client;
@@ -37,68 +31,28 @@ public class XtremeHCIMPlugin extends Plugin
 	private boolean playerIsFragile = false;
 	private final String GLASSMANCONFIGGROUP = "GLASSMAN";
 	private final String GLASSMANVALID = "VALID";
-	private final String GLASSMANACTIVATED = "ACTIVATED";
-
-	private final Set<WorldArea> tutorialIslandWorldArea = ImmutableSet.of(
-			new WorldArea(3053, 3072, 103, 64, 0),
-			new WorldArea(3059, 3051, 77, 21, 0),
-			new WorldArea(3072, 9493, 45, 41, 0)
-	);
 
 	@Override
 	protected void startUp() throws Exception
 	{
-		// Check if player was already in Xtreme HCIM mode or if config is enabled
-		boolean wasFragile = isPlayerFragile();
-		boolean configEnabled = config.enableXtremeHCIM();
+		log.info("ExtremeHCIM plugin started");
 
-		playerIsFragile = wasFragile || configEnabled;
-
-		if (playerIsFragile)
+		// Check if plugin is enabled in config
+		if (config.enableXtremeHCIM())
 		{
-			overrideSprites();
-			sendGamemodeMessage("Xtreme HCIM mode is active. You have one life!", Color.MAGENTA);
+			activateXtremeHCIMMode();
+		}
+		else
+		{
+			sendGamemodeMessage("ExtremeHCIM plugin loaded. Enable it in the config to activate!", Color.YELLOW);
 		}
 	}
 
 	@Override
 	protected void shutDown() throws Exception
 	{
+		log.info("ExtremeHCIM plugin stopped");
 		restoreGame(false);
-	}
-
-	@Subscribe
-	public void onPlayerSpawned(PlayerSpawned p)
-	{
-		if (p.getPlayer() == client.getLocalPlayer())
-		{
-			// Check if player is already in Xtreme HCIM mode
-			playerIsFragile = isPlayerFragile();
-
-			if (playerIsFragile)
-			{
-				overrideSprites();
-				return;
-			}
-
-			// Only auto-activate on Tutorial Island for new accounts
-			if (locationIsOnTutorialIsland(client.getLocalPlayer().getWorldLocation()))
-			{
-				if (getCombatExperience() == 0 && !hasPlayerEverActivatedMode())
-				{
-					activateXtremeHCIMMode();
-				}
-				else if (getCombatExperience() > 0)
-				{
-					sendGamemodeMessage("You have previously entered combat and are ineligible for auto-activation.", Color.RED);
-				}
-			}
-			// For players outside Tutorial Island, they need to manually activate
-			else if (!hasPlayerEverActivatedMode())
-			{
-				sendGamemodeMessage("Type '::xtremehcim' to activate Xtreme HCIM mode (WARNING: No safe deaths!)", Color.YELLOW);
-			}
-		}
 	}
 
 	@Subscribe
@@ -113,6 +67,10 @@ public class XtremeHCIMPlugin extends Plugin
 			if (client.getBoostedSkillLevel(Skill.HITPOINTS) > 1)
 			{
 				activateXtremeHCIMMode();
+			}
+			else
+			{
+				sendGamemodeMessage("You need more than 1 HP to activate Xtreme HCIM mode safely!", Color.RED);
 			}
 		}
 		else if (!configEnabled && playerIsFragile)
@@ -152,9 +110,7 @@ public class XtremeHCIMPlugin extends Plugin
 		}
 	}
 
-
-
-	public void manuallyActivateXtremeHCIM()
+	private void activateXtremeHCIMMode()
 	{
 		if (playerIsFragile)
 		{
@@ -162,30 +118,10 @@ public class XtremeHCIMPlugin extends Plugin
 			return;
 		}
 
-		if (client.getBoostedSkillLevel(Skill.HITPOINTS) <= 1)
-		{
-			sendGamemodeMessage("You need more than 1 HP to activate Xtreme HCIM mode safely!", Color.RED);
-			return;
-		}
-
-		activateXtremeHCIMMode();
-	}
-
-	private void activateXtremeHCIMMode()
-	{
 		overrideSprites();
-		sendGamemodeMessage("You have chosen to be a Xtreme HCIM. You have one life and" +
-				" there are no safe deaths. How far will you get?", Color.MAGENTA);
+		sendGamemodeMessage("Xtreme HCIM mode activated! You have one life and there are no safe deaths. How far will you get?", Color.MAGENTA);
 		playerIsFragile = true;
 		setPlayerConfig(GLASSMANVALID, Boolean.toString(playerIsFragile));
-		setPlayerConfig(GLASSMANACTIVATED, Boolean.toString(true));
-	}
-
-	private long getCombatExperience()
-	{
-		return client.getSkillExperience(Skill.ATTACK) + client.getSkillExperience(Skill.STRENGTH) +
-				client.getSkillExperience(Skill.DEFENCE) + client.getSkillExperience(Skill.MAGIC) +
-				client.getSkillExperience(Skill.RANGED);
 	}
 
 	private boolean isPlayerFragile()
@@ -193,13 +129,6 @@ public class XtremeHCIMPlugin extends Plugin
 		String playerString = getPlayerConfig(GLASSMANVALID);
 		if (playerString == null) {return false;}
 		return Boolean.parseBoolean(playerString);
-	}
-
-	private boolean hasPlayerEverActivatedMode()
-	{
-		String activatedString = getPlayerConfig(GLASSMANACTIVATED);
-		if (activatedString == null) {return false;}
-		return Boolean.parseBoolean(activatedString);
 	}
 
 	private void removePlayerFromFragileMode()
@@ -228,23 +157,16 @@ public class XtremeHCIMPlugin extends Plugin
 		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", message, null);
 	}
 
-	private boolean locationIsOnTutorialIsland(WorldPoint playerLocation)
-	{
-		for (WorldArea worldArea : tutorialIslandWorldArea) {
-			if (worldArea.contains2D(playerLocation)) {
-				return true;
-			}
-		}
-		return false;
-	}
-
 	private void restoreGame(boolean removePlayerFromGamemode)
 	{
 		playerIsFragile = false;
 		if (removePlayerFromGamemode) {removePlayerFromFragileMode();}
 		setHPListeners(true);
-		setHPOrbText(client.getBoostedSkillLevel(Skill.HITPOINTS));
-		setHPStatText(client.getBoostedSkillLevel(Skill.HITPOINTS), client.getRealSkillLevel(Skill.HITPOINTS));
+		if (client.getLocalPlayer() != null)
+		{
+			setHPOrbText(client.getBoostedSkillLevel(Skill.HITPOINTS));
+			setHPStatText(client.getBoostedSkillLevel(Skill.HITPOINTS), client.getRealSkillLevel(Skill.HITPOINTS));
+		}
 		restoreSprites();
 	}
 
