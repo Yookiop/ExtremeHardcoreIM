@@ -20,13 +20,20 @@ import javax.inject.Inject;
 @PluginDescriptor(
 		name = "ExtremeHCIM",
 		description = "Play the game with 1 true life and there are no safe deaths",
-		tags = {"HCIM", "hp", "nightmare", "mode", "damage", "hit", "health", "extreme", "fragile"}
+		tags = {"HCIM", "hp", "nightmare", "mode", "damage", "hit", "health", "extreme", "fragile"},
+		enabledByDefault = false,
+		conflicts = {}
 )
 public class XtremeHCIMPlugin extends Plugin
 {
-	@Inject private Client client;
-	@Inject private ConfigManager configManager;
-	@Inject private XtremeHCIMConfig config;
+	@Inject
+	private Client client;
+
+	@Inject
+	private ConfigManager configManager;
+
+	@Inject
+	private XtremeHCIMConfig config;
 
 	private boolean playerIsFragile = false;
 	private final String GLASSMANCONFIGGROUP = "GLASSMAN";
@@ -36,6 +43,7 @@ public class XtremeHCIMPlugin extends Plugin
 	protected void startUp() throws Exception
 	{
 		log.info("ExtremeHCIM plugin started");
+		System.out.println("ExtremeHCIM plugin starting up!"); // Debug print
 
 		// Check if plugin is enabled in config
 		if (config.enableXtremeHCIM())
@@ -55,6 +63,7 @@ public class XtremeHCIMPlugin extends Plugin
 		restoreGame(false);
 	}
 
+	// Rest of your methods remain the same...
 	@Subscribe
 	public void onGameTick(GameTick t)
 	{

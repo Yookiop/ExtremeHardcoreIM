@@ -7,7 +7,17 @@ public class PluginLauncher
 {
 	public static void main(String[] args) throws Exception
 	{
-		ExternalPluginManager.loadBuiltin(XtremeHCIMPlugin.class);
+		System.setProperty("runelite.development", "true");
+		System.setProperty("runelite.dev.mode", "true");
+
+		try {
+			ExternalPluginManager.loadBuiltin(XtremeHCIMPlugin.class);
+			System.out.println("Plugin loaded successfully!");
+		} catch (Exception e) {
+			System.err.println("Failed to load plugin: " + e.getMessage());
+			e.printStackTrace();
+		}
+
 		RuneLite.main(args);
 	}
 }
